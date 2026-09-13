@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { formatCzechDate, parseCzechNumber } from './client.js';
+import { assertWeightKg, formatCzechDate, parseCzechNumber } from './client.js';
 
 test('parses Czech decimal commas', () => {
   assert.equal(parseCzechNumber('20,43'), 20.43);
@@ -31,4 +31,16 @@ test('returns null rather than a misleading zero for absent values', () => {
 test('formats dates the way the site expects', () => {
   assert.equal(formatCzechDate(new Date(2026, 7, 2)), '02.08.2026');
   assert.equal(formatCzechDate(new Date(2026, 11, 25)), '25.12.2026');
+});
+
+test('accepts realistic body weights in kilograms', () => {
+  assert.equal(assertWeightKg(20), 20);
+  assert.equal(assertWeightKg(103.3), 103.3);
+  assert.equal(assertWeightKg(500), 500);
+});
+
+test('rejects implausible or non-finite body weights', () => {
+  assert.throws(() => assertWeightKg(0), /between 20 and 500/);
+  assert.throws(() => assertWeightKg(501), /between 20 and 500/);
+  assert.throws(() => assertWeightKg(Number.NaN), /between 20 and 500/);
 });

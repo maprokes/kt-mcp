@@ -46,6 +46,7 @@ Jakmile je agent připojený, přestane být zapisování jídel otravným prokl
 | `get_food_nutrition` | Kalorie a makra pro dané množství, přepočítané samotným webem. Pouze čtení. |
 | `log_food` | Zapíše záznam o jídle do jídelníčku. |
 | `get_day_summary` | Přečte denní součty. |
+| `log_weight` | Zapíše tělesnou hmotnost v kilogramech pro dnešek nebo zadané datum. |
 | `create_meal` | Uloží recept složený z existujících potravin. |
 | `list_my_meals` | Vypíše uložené recepty s jejich id a celkovou energií. |
 | `log_meal` | Zaloguje celý uložený recept jako jeden záznam. |

@@ -46,6 +46,7 @@ Once connected, food logging stops being a chore of tapping through search scree
 | `get_food_nutrition` | Calories and macros for a quantity, scaled by the site itself. Read-only. |
 | `log_food` | Write an eating record into the diary. |
 | `get_day_summary` | Read back a day's totals. |
+| `log_weight` | Record body weight in kilograms for today or a specified date. |
 | `create_meal` | Save a recipe built from existing foods. |
 | `list_my_meals` | List saved recipes with their ids and total energy. |
 | `log_meal` | Log a whole saved recipe into the diary as one entry. |
