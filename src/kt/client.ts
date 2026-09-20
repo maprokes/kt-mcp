@@ -84,6 +84,115 @@ export interface MealSummary {
   portions: number;
 }
 
+/** One row of the diary: something that was eaten, with what it contributed. */
+export interface DiaryEntry {
+  /** Identifies this diary row, not the food — the site calls it the diary guid. */
+  entryId: string;
+  /** The food's own id, the one search_food returns. Null for rows the site does not link to a food. */
+  foodId: string | null;
+  title: string;
+  /** How much was logged, exactly as the site renders it ("3 x kus (20 g)", "120 x 1 g"). */
+  amount: string;
+  energy: number | null;
+  energyUnit: string;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  fibre: number | null;
+  sugar: number | null;
+  /** "foodstuff" for a plain food, "meal" for one of the user's saved recipes. */
+  kind: string;
+}
+
+export interface DiaryMealSlot {
+  meal: string;
+  title: string;
+  energy: number | null;
+  entries: DiaryEntry[];
+}
+
+/** A burned-energy row (manual or synced from a tracker). */
+export interface DiaryActivity {
+  entryId: string;
+  title: string;
+  energy: number | null;
+}
+
+export interface DiaryTotals {
+  energy: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  fibre: number | null;
+  sugar: number | null;
+}
+
+export interface DiaryDay {
+  date: string;
+  energyUnit: string;
+  meals: DiaryMealSlot[];
+  activities: DiaryActivity[];
+  notes: string[];
+  /**
+   * Summed from the entries above, because the day payload's own *Total
+   * fields come back as zeroes. get_day_summary is the site's own arithmetic.
+   */
+  totals: DiaryTotals;
+}
+
+export interface LoggedDay {
+  date: string;
+  /**
+   * The site's own colour coding for the day, normalised ("good", "low", …).
+   * Null means the day is in the diary but carries no rating.
+   */
+  status: string | null;
+}
+
+/** One nutrient in a period analysis. Values are per-day averages. */
+export interface NutrientAverage {
+  title: string;
+  perDay: number | null;
+  target: number | null;
+  /** Percent of the target reached, as the site computes it. */
+  percentOfTarget: number | null;
+}
+
+/** One food (or food category) in the site's "most significant" ranking. */
+export interface Contributor {
+  title: string;
+  /** Food id where the site links one, usable with log_food. Categories have none. */
+  foodId: string | null;
+  /** Average contribution per day across the range. */
+  perDay: number | null;
+  unit: string | null;
+  /** How many times it was logged over the range ("12x" on the site). */
+  timesLogged: number | null;
+}
+
+/** The ranking for one nutrient: which foods contributed most of it. */
+export interface ContributorGroup {
+  nutrient: string;
+  items: Contributor[];
+}
+
+export interface PeriodAnalysis {
+  from: string;
+  to: string;
+  days: number;
+  /** True when at least one day in the range has no records, which drags every average down. */
+  someDaysWithoutRecords: boolean;
+  energy: NutrientAverage;
+  energyUnit: string;
+  nutrients: NutrientAverage[];
+  salt: NutrientAverage | null;
+  drink: NutrientAverage | null;
+  /** Per nutrient, the foods that contributed most of it, biggest first. */
+  topFoods: ContributorGroup[];
+  /** The same ranking rolled up into the site's food categories. */
+  topCategories: ContributorGroup[];
+}
+
 export class KtError extends Error {}
 
 /**
@@ -117,17 +226,34 @@ export function formatCzechDate(date: Date): string {
   return `${dd}.${mm}.${date.getFullYear()}`;
 }
 
-export function todayCzech(): string {
-  // The diary runs on Czech wall-clock time; the server usually doesn't
-  // (containers default to UTC, which would flip the date around midnight).
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Prague',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).formatToParts(new Date());
+// The diary runs on Czech wall-clock time; the server usually doesn't
+// (containers default to UTC, which would flip the date around midnight).
+const PRAGUE_DATE = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Prague',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+function pragueDate(date: Date): string {
+  const parts = PRAGUE_DATE.formatToParts(date);
   const get = (type: string) => parts.find(p => p.type === type)?.value ?? '';
   return `${get('day')}.${get('month')}.${get('year')}`;
+}
+
+export function todayCzech(): string {
+  return pragueDate(new Date());
+}
+
+/**
+ * Diary reads carry dates as epoch milliseconds (sometimes as a string), and
+ * they mark Czech midnight — so they must be rendered in that zone or a UTC
+ * container shows the previous day.
+ */
+export function czechDateFromEpoch(value: unknown): string | null {
+  const ms = typeof value === 'string' ? Number(value) : value;
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
+  return pragueDate(new Date(ms));
 }
 
 /**
@@ -139,6 +265,190 @@ export function assertCzechDate(date: string): string {
     throw new Error(`Invalid date "${date}" — expected dd.MM.yyyy, e.g. ${todayCzech()}`);
   }
   return date;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/** Sums a column across entries, keeping null when nothing contributed a number. */
+function sum(entries: DiaryEntry[], pick: (e: DiaryEntry) => number | null): number | null {
+  const values = entries.map(pick).filter((v): v is number => v !== null);
+  if (values.length === 0) return null;
+  // The site sends one decimal at most; re-round to keep 0.30000000000000004 out of the output.
+  return Math.round(values.reduce((a, b) => a + b, 0) * 100) / 100;
+}
+
+function parseDiaryEntry(raw: unknown, energyUnit: string): DiaryEntry | null {
+  const item = record(raw);
+  const entryId = item && text(item['id']);
+  if (!item || !entryId) return null;
+  return {
+    entryId,
+    foodId: text(item['guidType']),
+    title: String(item['title'] ?? ''),
+    amount: String(item['unit'] ?? ''),
+    energy: parseCzechNumber(item['energy']),
+    energyUnit: text(item['energyUnit']) ?? energyUnit,
+    protein: parseCzechNumber(item['protein']),
+    carbs: parseCzechNumber(item['carbohydrate']),
+    fat: parseCzechNumber(item['fat']),
+    fibre: parseCzechNumber(item['fiber']),
+    sugar: parseCzechNumber(item['sugar']),
+    kind: text(item['type']) ?? 'foodstuff',
+  };
+}
+
+/** Turns the diary-day payload into the entries, per meal, plus totals summed from them. */
+export function parseDiaryDay(raw: unknown, date: string): DiaryDay {
+  const day = record(raw);
+  if (!day || !Array.isArray(day['times'])) throw new KtError(`diary ${date}: expected a day with meal slots`);
+  const energyUnit = text(day['energyUnit']) ?? 'kcal';
+
+  const meals: DiaryMealSlot[] = day['times']
+    .map(slot => record(slot))
+    .filter((slot): slot is Record<string, unknown> => slot !== null)
+    .map(slot => {
+      const entries = (Array.isArray(slot['foodstuff']) ? slot['foodstuff'] : [])
+        .map(entry => parseDiaryEntry(entry, energyUnit))
+        .filter((entry): entry is DiaryEntry => entry !== null);
+      return {
+        meal: String(slot['id'] ?? ''),
+        title: String(slot['title'] ?? ''),
+        energy: parseCzechNumber(slot['energyTotal']),
+        entries,
+      };
+    });
+
+  const all = meals.flatMap(m => m.entries);
+  const activities = (Array.isArray(day['activities']) ? day['activities'] : [])
+    .map(entry => record(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null && text(entry['id']) !== null)
+    .map(entry => ({
+      entryId: String(entry['id']),
+      title: String(entry['title'] ?? ''),
+      energy: parseCzechNumber(entry['energy']),
+    }));
+  const notes = (Array.isArray(day['notes']) ? day['notes'] : [])
+    .map(note => (typeof note === 'string' ? note : text(record(note)?.['note'] ?? record(note)?.['title'])))
+    .filter((note): note is string => note !== null);
+
+  return {
+    date,
+    energyUnit,
+    meals,
+    activities,
+    notes,
+    totals: {
+      energy: sum(all, e => e.energy),
+      protein: sum(all, e => e.protein),
+      carbs: sum(all, e => e.carbs),
+      fat: sum(all, e => e.fat),
+      fibre: sum(all, e => e.fibre),
+      sugar: sum(all, e => e.sugar),
+    },
+  };
+}
+
+/**
+ * The calendar's list of days that carry records. The colour class is prefixed
+ * differently depending on which of the two variants answered ("cc-good" from
+ * the default route, "calendar-low" from the per-month one), so strip it.
+ */
+export function parseLoggedDays(raw: unknown): LoggedDay[] {
+  if (!Array.isArray(raw)) throw new KtError('logged days: expected an array');
+  return raw
+    .map(entry => record(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null)
+    .map(entry => ({ date: czechDateFromEpoch(entry['date']), status: text(entry['colorClass']) }))
+    .filter((day): day is { date: string; status: string | null } => day.date !== null)
+    .map(day => ({ date: day.date, status: day.status?.replace(/^(cc|calendar)-/, '') ?? null }));
+}
+
+function parseNutrient(raw: unknown, fallbackTitle: string): NutrientAverage | null {
+  const item = record(raw);
+  if (!item) return null;
+  return {
+    title: text(item['title']) ?? fallbackTitle,
+    perDay: parseCzechNumber(item['value']),
+    target: parseCzechNumber(item['target']),
+    percentOfTarget: parseCzechNumber(item['percent']),
+  };
+}
+
+/**
+ * Contributions arrive pre-rendered ("102 kcal", "7,3 g", "0,96 g"), because
+ * that ranking is only ever drawn as text on the statistics page.
+ */
+function parseContribution(value: unknown): { perDay: number | null; unit: string | null } {
+  const rendered = text(value);
+  if (!rendered) return { perDay: null, unit: null };
+  const match = /^([^a-zA-Z]+)\s*([a-zA-Z]+)?$/.exec(rendered.trim());
+  if (!match) return { perDay: null, unit: null };
+  return { perDay: parseCzechNumber(match[1] ?? ''), unit: match[2] ?? null };
+}
+
+function parseContributorGroups(raw: unknown): ContributorGroup[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(group => record(group))
+    .filter((group): group is Record<string, unknown> => group !== null && Array.isArray(group['items']))
+    .map(group => ({
+      nutrient: String(group['title'] ?? ''),
+      items: (group['items'] as unknown[])
+        .map(item => record(item))
+        .filter((item): item is Record<string, unknown> => item !== null)
+        .map(item => ({
+          title: String(item['title'] ?? ''),
+          foodId: text(item['id']),
+          ...parseContribution(item['valueString']),
+          // "12x" — the count of diary entries over the range.
+          timesLogged: parseCzechNumber(text(item['count'])?.replace(/x$/i, '') ?? null),
+        })),
+    }));
+}
+
+/** Days in an inclusive dd.MM.yyyy range; both ends are validated by the caller. */
+function daysBetween(from: string, to: string): number {
+  const asUtc = (date: string) => {
+    const [d, m, y] = date.split('.').map(Number) as [number, number, number];
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.floor((asUtc(to) - asUtc(from)) / 86_400_000) + 1;
+}
+
+/**
+ * The analysis route answers with per-day averages over the range — a range
+ * where half the days have no records halves every number, which is what
+ * `someDaysWithoutRecords` warns about.
+ */
+export function parsePeriodAnalysis(raw: unknown, from: string, to: string): PeriodAnalysis {
+  const analysis = record(raw);
+  if (!analysis || !Array.isArray(analysis['list'])) {
+    throw new KtError(`analysis ${from}-${to}: expected nutrient averages`);
+  }
+  const energy = parseNutrient(analysis['energy'], 'Energie');
+  if (!energy) throw new KtError(`analysis ${from}-${to}: no energy average`);
+
+  return {
+    from,
+    to,
+    days: daysBetween(from, to),
+    someDaysWithoutRecords: analysis['recordsMissing'] === true,
+    energy,
+    energyUnit: text(record(analysis['energy'])?.['energyUnit']) ?? 'kcal',
+    nutrients: analysis['list']
+      .map(item => parseNutrient(item, ''))
+      .filter((item): item is NutrientAverage => item !== null && item.title !== ''),
+    salt: parseNutrient(analysis['salt'], 'Sůl'),
+    drink: parseNutrient(analysis['drink'], 'Pitný režim'),
+    topFoods: parseContributorGroups(analysis['totalValueInfluence']),
+    topCategories: parseContributorGroups(analysis['totalValueInfluenceCategory']),
+  };
 }
 
 export interface KtCredentials {
@@ -356,6 +666,34 @@ export class KtClient {
   /** Raw daily summary. Shape is not fully documented, so it is passed through. */
   async getDaySummary(date?: string): Promise<unknown> {
     return this.authed(`/statistic/summary/${date === undefined ? todayCzech() : assertCzechDate(date)}/get?format=json`);
+  }
+
+  /** Everything logged on one day, meal by meal — the diary page's own data. */
+  async getDayEntries(date?: string): Promise<DiaryDay> {
+    const day = date === undefined ? todayCzech() : assertCzechDate(date);
+    return parseDiaryDay(await this.authed(`/user/diary/${day}/get?format=json`), day);
+  }
+
+  /**
+   * Which days carry records, over the site's own rolling window of roughly
+   * the last month. There is a second route that takes a date
+   * (`filled-out/<date>/`), but the server ignores it and answers for the
+   * current month either way, so it buys nothing — older days are read by
+   * date with getDayEntries, or averaged with getPeriodAnalysis.
+   */
+  async getLoggedDays(): Promise<LoggedDay[]> {
+    return parseLoggedDays(await this.authed('/user/diary/filled-out?format=json'));
+  }
+
+  /** Per-day averages across a date range, in one request. */
+  async getPeriodAnalysis(from: string, to: string): Promise<PeriodAnalysis> {
+    const start = assertCzechDate(from);
+    const end = assertCzechDate(to);
+    return parsePeriodAnalysis(
+      await this.authed(`/statistic/analysis/graph/${start}/${end}/get?format=json`),
+      start,
+      end,
+    );
   }
 
   // ---------------------------------------------------------------------

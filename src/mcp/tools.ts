@@ -264,13 +264,103 @@ export function registerTools(server: McpServer, kt: KtClient): void {
     {
       title: 'Get a day summary',
       description:
-        'Read back totals from the diary for one day — use this when the user asks what they have eaten, how many calories they have left, or how a day went.',
+        'Read back totals from the diary for one day — use this when the user asks how many calories they have left or how a day went. ' +
+        'It answers with totals and targets only; call get_day_entries when they ask what they actually ate.',
       inputSchema: {
         date: z.string().optional().describe(dateDescription),
       },
     },
     guard('get_day_summary', async ({ date }) => {
       return json({ date: date ?? todayCzech(), summary: await kt.getDaySummary(date) });
+    }),
+  );
+
+  server.registerTool(
+    'get_day_entries',
+    {
+      title: 'List a day\'s diary entries',
+      description:
+        'List everything logged on one day, meal by meal, with the portion and the energy and macros each entry contributed. ' +
+        'Use this when the user asks what they ate, wants a day checked for a mistake, or refers to something they logged earlier. ' +
+        'Each entry carries an entryId identifying that diary row, and a foodId usable with get_food_portions or log_food to repeat it.',
+      inputSchema: {
+        date: z.string().optional().describe(dateDescription),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    guard('get_day_entries', async ({ date }) => {
+      const day = await kt.getDayEntries(date);
+      // Empty meal slots exist for every day; sending six of them back as
+      // noise makes the interesting ones harder to see.
+      return json({
+        ...day,
+        meals: day.meals.filter(meal => meal.entries.length > 0),
+        note: 'totals are summed from the entries; get_day_summary has the site\'s own totals and the daily targets',
+      });
+    }),
+  );
+
+  server.registerTool(
+    'get_logged_days',
+    {
+      title: 'List days with diary records',
+      description:
+        'List which days actually have records in the diary, with the site\'s own colour rating for each. ' +
+        'Use it to find the days worth reading, or when the user asks how consistently they have been logging. ' +
+        'It covers the site\'s own window of roughly the last month; further back, read a specific date with get_day_entries or average a range with get_period_analysis.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    guard('get_logged_days', async () => {
+      const days = await kt.getLoggedDays();
+      return json({
+        days,
+        count: days.length,
+        window: 'the site answers for roughly the last month; older dates still read fine with get_day_entries',
+      });
+    }),
+  );
+
+  server.registerTool(
+    'get_period_analysis',
+    {
+      title: 'Average a period',
+      description:
+        'Averages over a date range in one request: energy, protein, carbohydrate, fat and fibre per day against their targets. ' +
+        'It also answers "where is this coming from": per nutrient, the individual foods that contributed most of it, how much each added per day and how many times it was logged. ' +
+        'Use this for "how did last week go", "am I getting enough protein" or "what is eating my calorie budget" instead of reading day after day. ' +
+        'Every number is a per-day average over the whole range, including days with no records — when someDaysWithoutRecords is true the averages are pulled down by empty days.',
+      inputSchema: {
+        from: z.string().describe('First day of the range, dd.MM.yyyy.'),
+        to: z.string().describe('Last day of the range, dd.MM.yyyy. Same as `from` for a single day.'),
+        top: z
+          .number()
+          .int()
+          .min(0)
+          .max(10)
+          .optional()
+          .describe('How many top foods to return per nutrient. Defaults to 5; 0 leaves them out entirely.'),
+        by_category: z
+          .boolean()
+          .optional()
+          .describe(
+            'Also roll the ranking up into the site\'s food categories ("Fast food", "Maso drůbeží"). Off by default.',
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    guard('get_period_analysis', async ({ from, to, top, by_category }) => {
+      const analysis = await kt.getPeriodAnalysis(from, to);
+      // The site sends ten foods for each of seven nutrients; handing all
+      // seventy to the model buries the answer it was asked for.
+      const limit = top ?? 5;
+      const trim = (groups: typeof analysis.topFoods) =>
+        limit === 0 ? [] : groups.map(g => ({ ...g, items: g.items.slice(0, limit) }));
+      return json({
+        ...analysis,
+        topFoods: trim(analysis.topFoods),
+        topCategories: by_category === true ? trim(analysis.topCategories) : [],
+      });
     }),
   );
 }
