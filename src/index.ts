@@ -86,7 +86,8 @@ app.post('/mcp', requireAuth, async (req, res) => {
     {
       instructions:
         'Logs food into the user\'s kaloricketabulky.cz diary. The food database is Czech: search with Czech terms for the best matches. ' +
-        'When the user gives a count rather than a weight ("3 eggs"), call get_food_portions and log a natural portion unit instead of estimating grams.',
+        'When the user gives a count rather than a weight ("3 eggs"), call get_food_portions and log a natural portion unit instead of estimating grams. ' +
+        'Drinks, water included, are logged like food and count toward the day\'s drinking target.',
     },
   );
   registerTools(server, kt);

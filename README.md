@@ -35,6 +35,8 @@ Jakmile je agent připojený, přestane být zapisování jídel otravným prokl
 
 - **Vyfoťte recept.** Vyfoťte recept z kuchařky nebo screenshot z webu a řekněte *„ulož mi to jako jídlo"*. Agent přečte suroviny, každou najde v databázi a vytvoří uložený recept — příště zalogujete jedním záznamem. Cestou můžete upravovat: *„vyměň smetanu za bílý jogurt a dej poloviční cukr."*
 
+- **Zapisujte i pití.** „Vypil jsem půl litru vody" zapíše vodu v mililitrech a web ji započítá do pitného režimu. Stejně tak káva, džus nebo pivo.
+
 - **Ptejte se, jak vám jde den.** „Kolik kalorií mi dnes zbývá?" přečte denní součty přímo z jídelníčku.
 
 ## Nástroje

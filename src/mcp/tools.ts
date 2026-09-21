@@ -8,13 +8,20 @@
 
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { GRAM_UNIT, KtClient, MEALS, type MealId, todayCzech } from '../kt/client.js';
+import { baseUnitOf, KtClient, MEALS, type MealId, todayCzech } from '../kt/client.js';
 
 const MEAL_IDS = Object.keys(MEALS) as [MealId, ...MealId[]];
 
 const mealDescription = `Which meal slot to file the entry under: ${Object.entries(MEALS)
   .map(([id, name]) => `${id} = ${name}`)
   .join(', ')}.`;
+
+// Omitting unit_id means the food's base unit, which is not always grams:
+// drinks count in millilitres and have no gram unit at all.
+const amountDescription =
+  'How many units. Without unit_id this is grams for food and millilitres for drinks — the food\'s base unit.';
+const unitDescription =
+  'Unit id from get_food_portions. Omit to use the food\'s base unit (grams for food, millilitres for drinks).';
 
 const dateDescription =
   'Date in dd.MM.yyyy format (Czech style). Omit for today. Use this to log something the user ate on a previous day.';
@@ -58,7 +65,8 @@ export function registerTools(server: McpServer, kt: KtClient): void {
       description:
         'Find foods in the kaloricketabulky.cz database by name or barcode. Call this first whenever the user mentions eating something, to get the food id the other tools need. ' +
         'The database is Czech, so prefer Czech search terms ("vejce" rather than "egg") for the best matches. ' +
-        'A 13-digit EAN barcode also works and resolves to the exact product.',
+        'A 13-digit EAN barcode also works and resolves to the exact product. ' +
+        'Drinks live in the same database — "voda", "káva s mlékem", "pivo" — and are logged the same way.',
       inputSchema: {
         query: z.string().min(1).describe('Food name (Czech works best) or a 13-digit EAN barcode.'),
         limit: z.number().int().min(1).max(25).optional().describe('Maximum results to return. Defaults to 10.'),
@@ -91,8 +99,8 @@ export function registerTools(server: McpServer, kt: KtClient): void {
         title: detail.title,
         default: { amount: detail.defaultAmount, unit_id: detail.defaultUnitId },
         units: detail.units,
-        grams_unit_id: GRAM_UNIT,
-        note: `Use grams_unit_id (${GRAM_UNIT}) with an amount in grams when the user gave a weight.`,
+        base_unit_id: baseUnitOf(detail.units),
+        note: 'Omit unit_id when logging to use base_unit_id: an amount in grams for food, in millilitres for drinks.',
       });
     }),
   );
@@ -106,15 +114,13 @@ export function registerTools(server: McpServer, kt: KtClient): void {
         'Use this when the user asks what something contains, or to confirm a portion before logging it. The site does the scaling, so the numbers match its own diary exactly.',
       inputSchema: {
         food_id: z.string().min(1).describe('The food id returned by search_food.'),
-        amount: z.number().positive().describe('How many units. With the grams unit this is a weight in grams.'),
-        unit_id: z
-          .string()
-          .optional()
-          .describe(`Unit id from get_food_portions. Omit to use grams (${GRAM_UNIT}).`),
+        amount: z.number().positive().describe(amountDescription),
+        unit_id: z.string().optional().describe(unitDescription),
       },
     },
     guard('get_food_nutrition', async ({ food_id, amount, unit_id }) => {
-      return json(await kt.getNutrition(food_id, amount, unit_id ?? GRAM_UNIT));
+      const unit = unit_id ?? baseUnitOf((await kt.getFoodDetail(food_id)).units);
+      return json(await kt.getNutrition(food_id, amount, unit));
     }),
   );
 
@@ -124,22 +130,19 @@ export function registerTools(server: McpServer, kt: KtClient): void {
       title: 'Log food to the diary',
       description:
         'Write an eating record into the user\'s kaloricketabulky.cz diary. This modifies their real diary, so confirm the food and portion first if there was any ambiguity in what they said. ' +
+        'Drinks go through here too: water, coffee or juice logged this way counts toward the day\'s drinking target (pitný režim), so "I drank half a litre of water" is search_food("voda") then log_food with amount 500. ' +
         'Returns the nutrition that was logged.',
       inputSchema: {
         food_id: z.string().min(1).describe('The food id returned by search_food.'),
-        amount: z.number().positive().describe('How many units. With the grams unit this is a weight in grams.'),
-        unit_id: z
-          .string()
-          .optional()
-          .describe(`Unit id from get_food_portions. Omit to use grams (${GRAM_UNIT}).`),
+        amount: z.number().positive().describe(amountDescription),
+        unit_id: z.string().optional().describe(unitDescription),
         meal: z.enum(MEAL_IDS).describe(mealDescription),
         date: z.string().optional().describe(dateDescription),
       },
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     guard('log_food', async ({ food_id, amount, unit_id, meal, date }) => {
-      const unit = unit_id ?? GRAM_UNIT;
-      await kt.logFood({ foodId: food_id, amount, unitId: unit, meal, date });
+      const { unitId: unit } = await kt.logFood({ foodId: food_id, amount, unitId: unit_id, meal, date });
       // The write has landed; a failed read-back must not become a tool error,
       // or the model retries and logs the food twice.
       const nutrition = await kt.getNutrition(food_id, amount, unit).catch(() => null);
