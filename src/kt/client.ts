@@ -205,6 +205,18 @@ export function baseUnitOf(units: UnitOption[]): string {
   return units.find(u => u.grams === 0 || u.grams === 1)?.id ?? GRAM_UNIT;
 }
 
+/** The unit list a food's detail form offers (`unitOptions`), in the site's order. */
+export function parseUnitOptions(form: Record<string, unknown>): UnitOption[] {
+  const rawUnits = Array.isArray(form['unitOptions']) ? form['unitOptions'] : [];
+  return rawUnits
+    .filter((u): u is Record<string, unknown> => !!u && typeof u === 'object')
+    .map(u => ({
+      id: String(u['id']),
+      title: String(u['title']),
+      grams: parseCzechNumber(u['multiplier']) ?? 0,
+    }));
+}
+
 /**
  * Czech number formatting: decimal comma, thin/regular space as the thousands
  * separator ("1 043", "20,43"). Returns null for absent or unparseable values
@@ -581,14 +593,7 @@ export class KtClient {
     const form = this.parseEnvelope(text, 'food detail') as Record<string, unknown>;
     if (typeof form['guid'] !== 'string') throw new KtError(`food detail: unknown food id ${foodId}`);
 
-    const rawUnits = Array.isArray(form['unitOptions']) ? form['unitOptions'] : [];
-    const units: UnitOption[] = rawUnits
-      .filter((u): u is Record<string, unknown> => !!u && typeof u === 'object')
-      .map(u => ({
-        id: String(u['id']),
-        title: String(u['title']),
-        grams: parseCzechNumber(u['multiplier']) ?? 0,
-      }));
+    const units = parseUnitOptions(form);
     // The site echoes back whatever guid is requested, even for foods that do
     // not exist, so the guid check above no longer catches bad ids. A real
     // food always offers at least its base unit; an empty list means the id
@@ -642,7 +647,7 @@ export class KtClient {
     unitId?: string;
     meal: MealId;
     date?: string;
-  }): Promise<void> {
+  }): Promise<{ unitId: string }> {
     // Fetch the form with a session established, exactly as the site's own
     // frontend does: it carries user-specific fields (favourite, preferred
     // unit) that we must post back unchanged.
@@ -651,16 +656,24 @@ export class KtClient {
     )) as Record<string, unknown>;
     if (typeof form['guid'] !== 'string') throw new KtError(`log food: unknown food id ${args.foodId}`);
 
+    // Without an explicit unit, `amount` is in the food's base unit. That is
+    // grams for solids but millilitres for drinks, whose unit list has no gram
+    // unit at all — posting grams for water is rejected outright ("Potravinu
+    // se nepodařilo zapsat"). The form's own `unitGuid` is no fallback either:
+    // it is the site's default *portion*, so 100 would mean 100 pieces.
+    const unitId = args.unitId ?? baseUnitOf(parseUnitOptions(form));
+
     // The site's own frontend posts the fetched form back whole, option
     // arrays included — deviate from that and the server may reject the write
     // ("Potravinu se nepodařilo zapsat do deníku").
     const payload: Record<string, unknown> = { ...form };
     payload['multiplier'] = args.amount;
-    payload['unitGuid'] = args.unitId ?? form['unitGuid'] ?? GRAM_UNIT;
+    payload['unitGuid'] = unitId;
     payload['diaryTimeGuid'] = args.meal;
     payload['date'] = args.date === undefined ? todayCzech() : assertCzechDate(args.date);
 
     await this.authed('/user/foodstuff/add?format=json&=', { method: 'POST', body: payload });
+    return { unitId };
   }
 
   /** Raw daily summary. Shape is not fully documented, so it is passed through. */

@@ -35,6 +35,8 @@ Once connected, food logging stops being a chore of tapping through search scree
 
 - **Photograph a recipe.** Snap a recipe from a cookbook or a screenshot from the web and say *"save this as a meal"*. The agent reads the ingredients, finds each one in the database, and creates a reusable saved recipe — one entry to log next time you cook it. You can edit on the way in: *"swap the cream for white yogurt and halve the sugar."*
 
+- **Log drinks too.** "I drank half a litre of water" logs water in millilitres, and the site counts it toward the day's drinking target. Coffee, juice and beer work the same way.
+
 - **Ask how your day is going.** "How many calories do I have left?" reads today's totals straight from the diary.
 
 ## Tools
