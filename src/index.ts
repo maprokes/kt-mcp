@@ -11,13 +11,12 @@
 
 import express from 'express';
 import { join } from 'node:path';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import { loadConfig } from './config.js';
 import { KtClient } from './kt/client.js';
-import { registerTools } from './mcp/tools.js';
+import { createServer } from './mcp/server.js';
 import { MCP_SCOPE, SingleUserOAuthProvider } from './auth/provider.js';
 
 const config = loadConfig();
@@ -81,17 +80,7 @@ const requireAuth = requireBearerAuth({
  * and it means a redeploy can never strand a half-open session.
  */
 app.post('/mcp', requireAuth, async (req, res) => {
-  const server = new McpServer(
-    { name: 'kaloricketabulky', version: '0.1.0' },
-    {
-      instructions:
-        'Logs food into the user\'s kaloricketabulky.cz diary. The food database is Czech: search with Czech terms for the best matches. ' +
-        'When the user gives a count rather than a weight ("3 eggs"), call get_food_portions and log a natural portion unit instead of estimating grams. ' +
-        'Drinks, water included, are logged like food and count toward the day\'s drinking target. ' +
-        'Body weight can be recorded with log_weight, but only when the user explicitly asks for the weight to be written.',
-    },
-  );
-  registerTools(server, kt);
+  const server = createServer(kt);
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {

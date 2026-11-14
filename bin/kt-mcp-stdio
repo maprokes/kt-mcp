@@ -1,0 +1,14 @@
+#!/bin/sh
+# Local stdio entrypoint for OpenCode / other MCP clients.
+#
+# Secrets (kaloricketabulky.cz login) live outside this repo in
+# ~/.config/kt-mcp/env. Override the location with KT_ENV_FILE.
+set -eu
+ENV_FILE="${KT_ENV_FILE:-$HOME/.config/kt-mcp/env}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+exec node "$(dirname "$0")/../dist/stdio.js"

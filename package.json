@@ -18,7 +18,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test \"dist/**/*.test.js\""
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "mcp": "node dist/stdio.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
