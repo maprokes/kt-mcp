@@ -463,6 +463,17 @@ export function parsePeriodAnalysis(raw: unknown, from: string, to: string): Per
   };
 }
 
+/**
+ * Body weight in kilograms. Keep a second validation layer below the MCP
+ * schema because KtClient can also be used directly.
+ */
+export function assertWeightKg(weight: number): number {
+  if (!Number.isFinite(weight) || weight < 20 || weight > 500) {
+    throw new Error(`Invalid weight "${weight}" — expected kilograms between 20 and 500`);
+  }
+  return weight;
+}
+
 export interface KtCredentials {
   email: string;
   password: string;
@@ -707,6 +718,17 @@ export class KtClient {
       start,
       end,
     );
+  }
+
+  /** Records body weight in the user's real Kaloricke Tabulky history. */
+  async logWeight(args: { weightKg: number; date?: string }): Promise<void> {
+    await this.authed('/user/weight/add?format=json&=', {
+      method: 'POST',
+      body: {
+        weight: assertWeightKg(args.weightKg),
+        date: args.date === undefined ? todayCzech() : assertCzechDate(args.date),
+      },
+    });
   }
 
   // ---------------------------------------------------------------------

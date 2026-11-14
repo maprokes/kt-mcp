@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
+  assertWeightKg,
   baseUnitOf,
   czechDateFromEpoch,
   formatCzechDate,
@@ -264,4 +265,16 @@ test('defaults drinks to millilitres, because they have no gram unit', () => {
     ]),
     '0000000000000001',
   );
+});
+
+test('accepts realistic body weights in kilograms', () => {
+  assert.equal(assertWeightKg(20), 20);
+  assert.equal(assertWeightKg(103.3), 103.3);
+  assert.equal(assertWeightKg(500), 500);
+});
+
+test('rejects implausible or non-finite body weights', () => {
+  assert.throws(() => assertWeightKg(0), /between 20 and 500/);
+  assert.throws(() => assertWeightKg(501), /between 20 and 500/);
+  assert.throws(() => assertWeightKg(Number.NaN), /between 20 and 500/);
 });

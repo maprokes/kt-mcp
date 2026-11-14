@@ -51,6 +51,7 @@ Once connected, food logging stops being a chore of tapping through search scree
 | `get_day_entries` | List what a day holds — meal by meal, with each entry's portion, energy and macros. |
 | `get_logged_days` | Which days carry diary records, with the site's own colour rating (roughly the last month). |
 | `get_period_analysis` | Per-day averages across a range: energy, protein, carbs, fat and fibre against their targets, plus the foods behind each nutrient and how often each was logged. |
+| `log_weight` | Record body weight in kilograms for today or a specified date. |
 | `create_meal` | Save a recipe built from existing foods. |
 | `list_my_meals` | List saved recipes with their ids and total energy. |
 | `log_meal` | Log a whole saved recipe into the diary as one entry. |

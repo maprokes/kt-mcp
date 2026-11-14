@@ -366,4 +366,35 @@ export function registerTools(server: McpServer, kt: KtClient): void {
       });
     }),
   );
+
+  server.registerTool(
+    'log_weight',
+    {
+      title: 'Log body weight',
+      description:
+        "Record body weight in kilograms in the user's real Kaloricke Tabulky weight history. " +
+        'Call this only when the user explicitly asks to record or log a weight; never treat merely mentioning a weight as permission to write it. ' +
+        'The tool returns only after Kaloricke Tabulky accepts the write.',
+      inputSchema: {
+        weight_kg: z
+          .number()
+          .min(20)
+          .max(500)
+          .describe('Body weight in kilograms, for example 103.3.'),
+        date: z
+          .string()
+          .optional()
+          .describe('Date in dd.MM.yyyy format (Czech style). Omit for today.'),
+      },
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    guard('log_weight', async ({ weight_kg, date }) => {
+      await kt.logWeight({ weightKg: weight_kg, date });
+      return json({
+        logged: true,
+        weight_kg,
+        date: date ?? todayCzech(),
+      });
+    }),
+  );
 }

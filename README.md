@@ -51,6 +51,7 @@ Jakmile je agent připojený, přestane být zapisování jídel otravným prokl
 | `get_day_entries` | Vypíše, co je zapsané za den — po jídlech, s porcí, kaloriemi a makry každé položky. |
 | `get_logged_days` | Které dny mají v deníku záznam, i s barevným hodnocením webu (zhruba poslední měsíc). |
 | `get_period_analysis` | Průměry na den za období: energie, bílkoviny, sacharidy, tuky a vláknina proti cílům, plus nejvýznamnější potraviny u každé živiny, s počtem zápisů. |
+| `log_weight` | Zapíše tělesnou hmotnost v kilogramech pro dnešek nebo zadané datum. |
 | `create_meal` | Uloží recept složený z existujících potravin. |
 | `list_my_meals` | Vypíše uložené recepty s jejich id a celkovou energií. |
 | `log_meal` | Zaloguje celý uložený recept jako jeden záznam. |
