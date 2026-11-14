@@ -45,7 +45,10 @@ Jakmile je agent připojený, přestane být zapisování jídel otravným prokl
 | `get_food_portions` | Vypíše přirozené porce potraviny (`kus (55 g)`, `velký kus (60 g)`), takže „3 vejce" se zapíšou jako tři kusy, ne odhadnutá váha. |
 | `get_food_nutrition` | Kalorie a makra pro dané množství, přepočítané samotným webem. Pouze čtení. |
 | `log_food` | Zapíše záznam o jídle do jídelníčku. |
-| `get_day_summary` | Přečte denní součty. |
+| `get_day_summary` | Přečte denní součty proti cílům. |
+| `get_day_entries` | Vypíše, co je zapsané za den — po jídlech, s porcí, kaloriemi a makry každé položky. |
+| `get_logged_days` | Které dny mají v deníku záznam, i s barevným hodnocením webu (zhruba poslední měsíc). |
+| `get_period_analysis` | Průměry na den za období: energie, bílkoviny, sacharidy, tuky a vláknina proti cílům, plus nejvýznamnější potraviny u každé živiny, s počtem zápisů. |
 | `create_meal` | Uloží recept složený z existujících potravin. |
 | `list_my_meals` | Vypíše uložené recepty s jejich id a celkovou energií. |
 | `log_meal` | Zaloguje celý uložený recept jako jeden záznam. |
@@ -237,7 +240,8 @@ jméno klienta zobrazené ve formuláři.
 - **`md5(hesla)` je ekvivalent hesla.** Web hashuje heslo na klientovi, hash je tedy stejně citlivý jako heslo samotné. Podle toho s `KT_PASSWORD` zacházejte.
 - **Jeden účet na instanci.** Server se přihlašuje k jedinému účtu kaloricketabulky.cz. Dva lidé, dva kontejnery.
 - **Osobní použití.** Automatizace zápisů do vlastního účtu je mnohem měkčí pozice než hromadný scraping, ale pořád je mimo cokoli, co Dine4Fit posvětil. Držte frekvenci požadavků na lidské úrovni a nestavte na tom konkurenčního klienta.
-- **Čtení jednotlivých záznamů dne** je nejméně ověřený endpoint; `get_day_summary` posílá odpověď webu beze změny dál, protože její tvar není plně zdokumentovaný.
+- **Denní součty** posílá `get_day_summary` beze změny dál, protože tvar odpovědi webu není plně zdokumentovaný. `get_day_entries` naopak jednotlivé záznamy rozebírá, a součty si dopočítává sám: vlastní `*Total` pole v odpovědi deníku chodí jako nuly.
+- **Analýza období počítá průměr na den za celý rozsah**, včetně dnů bez zápisu — týden se dvěma zapsanými dny vypadá jako hladovka. `get_period_analysis` proto vrací `someDaysWithoutRecords`.
 - **Část porce receptu zalogovat nejde.** Formulář pro přidání jídla sice nabízí `count` proti pseudo-jednotkám porce, procenta a gramy, ale server ho ignoruje a zaloguje vždy celý recept — měřeno na receptu o 249 kcal přidalo 0,5 porce i polovina váhy plných 249. `log_meal` proto nemá argument `portions`; když snědená byla jen část receptu, zalogujte suroviny jednotlivě přes `log_food`.
 
 ## Licence

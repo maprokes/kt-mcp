@@ -45,7 +45,10 @@ Once connected, food logging stops being a chore of tapping through search scree
 | `get_food_portions` | List a food's natural portion units (`kus (55 g)`, `velký kus (60 g)`) so "3 eggs" logs as three pieces rather than an estimated weight. |
 | `get_food_nutrition` | Calories and macros for a quantity, scaled by the site itself. Read-only. |
 | `log_food` | Write an eating record into the diary. |
-| `get_day_summary` | Read back a day's totals. |
+| `get_day_summary` | Read back a day's totals against their targets. |
+| `get_day_entries` | List what a day holds — meal by meal, with each entry's portion, energy and macros. |
+| `get_logged_days` | Which days carry diary records, with the site's own colour rating (roughly the last month). |
+| `get_period_analysis` | Per-day averages across a range: energy, protein, carbs, fat and fibre against their targets, plus the foods behind each nutrient and how often each was logged. |
 | `create_meal` | Save a recipe built from existing foods. |
 | `list_my_meals` | List saved recipes with their ids and total energy. |
 | `log_meal` | Log a whole saved recipe into the diary as one entry. |
@@ -240,7 +243,8 @@ on the form before authorizing.
 - **`md5(password)` is password-equivalent.** The site hashes the password client-side, so the hash is as sensitive as the password. Treat `KT_PASSWORD` accordingly.
 - **One account per instance.** The server logs into a single kaloricketabulky.cz account. Two people, two containers.
 - **Personal use.** Automating entry into your own account is a far softer position than bulk scraping, but it is still outside anything Dine4Fit has sanctioned. Keep the request rate human, and don't build a competing client on it.
-- **Reading a day's individual entries** is the least-verified endpoint; `get_day_summary` passes the site's response through unmodified because its shape isn't fully documented.
+- **Day totals** are passed through unmodified by `get_day_summary`, because the site's response shape isn't fully documented. `get_day_entries` does parse the individual entries, and sums the totals itself: the diary payload's own `*Total` fields come back as zeroes.
+- **A period analysis averages per day across the whole range**, empty days included — a week with two logged days reads like starvation. `get_period_analysis` therefore returns `someDaysWithoutRecords`.
 - **Partial portions of a recipe cannot be logged.** The meal-add form offers a `count` against portion, percent and gram pseudo-units, but the server ignores it and logs the whole recipe regardless — measured against a 249 kcal recipe, both 0.5 portions and half the total weight added the full 249. `log_meal` therefore takes no `portions` argument; log the ingredients individually with `log_food` when only part of a recipe was eaten.
 
 ## License
