@@ -41,14 +41,29 @@ KT_PASSWORD=your-password
 ```sh
 npm run build          # tsc -> dist/
 npm test               # build + 18 tests
-bin/kt-mcp-stdio       # stdio server; OpenCode starts this itself
+kt-mcp-login           # ask for e-mail + password, store them, check the login
+bin/kt-mcp-stdio       # stdio server; OpenCode and Claude start this themselves
 npm start              # the upstream HTTP + OAuth server (needs .env, PUBLIC_URL…)
 ```
+
+`kt-mcp-login` (`bin/kt-mcp-login`, linked into `~/.local/bin`) prompts with the
+password hidden, quotes whatever characters it gets, writes
+`~/.config/kt-mcp/env` with mode 600 and then calls `scripts/check-login.mjs`,
+which starts the stdio server and asks for today's summary, so a wrong password
+is reported immediately. Re-running it just replaces the file.
 
 OpenCode config: the `kt` server in `~/.config/opencode/opencode.jsonc`, tools
 named `kt_*`, denied everywhere except the `fitness` workspace
 (`~/projects/fitness/opencode.json` allows them). Check with
 `opencode mcp list` → `kt connected`.
+
+Claude Code: `.mcp.json` in `~/projects/fitness` (main session) and inline
+`mcpServers` in `~/.claude/agents/fitness-coach.md` (sub-agent), tools named
+`mcp__kt__*`. Any Claude run outside the fitness folder needs its own server
+entry; the login file is shared.
+
+Fork: `maprokes/kt-mcp` was created on 2026-11-14 with `gh repo fork`, and
+`main` is pushed to it over SSH.
 
 ## Updating later
 

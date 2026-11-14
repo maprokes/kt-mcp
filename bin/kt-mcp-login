@@ -1,0 +1,60 @@
+#!/bin/sh
+# Prompts for the kaloricketabulky.cz login, writes it to ~/.config/kt-mcp/env
+# and checks it against the real diary. Safe to re-run: it overwrites the file.
+#
+#   bin/kt-mcp-login                 # asks for e-mail and password
+#   KT_ENV_FILE=/tmp/env bin/kt-mcp-login
+#
+# The password is read without echo, quoted so any characters survive, and the
+# file is written with mode 600 outside every repo. Nothing is printed back.
+
+set -eu
+
+ENV_FILE="${KT_ENV_FILE:-$HOME/.config/kt-mcp/env}"
+ENV_DIR=$(dirname "$ENV_FILE")
+# Resolve through a symlink (the script is also linked into ~/.local/bin).
+SELF=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
+ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+
+if [ ! -t 0 ]; then
+  echo "Tohle chce terminál (čte e-mail a heslo interaktivně)." >&2
+  exit 1
+fi
+
+printf 'Kalorické tabulky e-mail: '
+IFS= read -r KT_EMAIL
+printf 'Kalorické tabulky heslo (nevidí se): '
+stty -echo 2>/dev/null || true
+IFS= read -r KT_PASSWORD
+stty echo 2>/dev/null || true
+printf '\n'
+
+if [ -z "$KT_EMAIL" ] || [ -z "$KT_PASSWORD" ]; then
+  echo "E-mail i heslo musí být vyplněné, nic jsem neuložil." >&2
+  exit 1
+fi
+
+# Single-quote a value for `sh`, escaping embedded single quotes.
+quote() {
+  printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"
+}
+
+mkdir -p "$ENV_DIR"
+chmod 700 "$ENV_DIR" 2>/dev/null || true
+TMP="$ENV_FILE.tmp.$$"
+{
+  echo '# Kalorické tabulky login for kt-mcp (sourced by bin/kt-mcp-stdio).'
+  echo "# Written by bin/kt-mcp-login on $(date -I). Keep this file private."
+  echo "KT_EMAIL=$(quote "$KT_EMAIL")"
+  echo "KT_PASSWORD=$(quote "$KT_PASSWORD")"
+} > "$TMP"
+chmod 600 "$TMP"
+mv "$TMP" "$ENV_FILE"
+unset KT_EMAIL KT_PASSWORD
+
+echo "Uloženo do $ENV_FILE (práva 600)."
+
+if command -v node >/dev/null 2>&1 && [ -f "$ROOT/scripts/check-login.mjs" ]; then
+  echo 'Zkouším přihlášení…'
+  KT_ENV_FILE="$ENV_FILE" node "$ROOT/scripts/check-login.mjs" "$ROOT/bin/kt-mcp-stdio"
+fi
