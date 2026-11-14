@@ -12,6 +12,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { KtClient } from './kt/client.js';
 import { createServer } from './mcp/server.js';
 
+// stdout is the MCP transport. The tool guard and the HTTP entrypoint log with
+// console.log, which would corrupt the stream here, so send it to stderr.
+console.log = console.error;
+
 function required(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim() === '') {

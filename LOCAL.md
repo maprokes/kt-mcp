@@ -53,11 +53,19 @@ named `kt_*`, denied everywhere except the `fitness` workspace
 ## Updating later
 
 ```sh
-git fetch upstream          # after `git remote add upstream https://github.com/stany9g/kt-mcp.git`
+git fetch upstream                       # upstream = https://github.com/stany9g/kt-mcp.git
 git log --oneline origin/main..upstream/main
 git merge upstream/main
 npm test
+git push origin main                     # origin = git@github.com:maprokes/kt-mcp.git (SSH)
 ```
 
 The local stdio files (`src/stdio.ts`, `src/mcp/server.ts`, `bin/kt-mcp-stdio`,
 this file) are the only divergence from upstream besides the three merges.
+`src/stdio.ts` points `console.log` at stderr, because the tool guard logs with
+it and stdout carries the protocol.
+
+Verified 2026-11-14: `npm test` 18/18, `opencode mcp list` → `kt connected`,
+`search_food` returns live results from kaloricketabulky.cz. Logged-in tools
+(`get_day_summary`, `log_food`) still returned a login error because
+`~/.config/kt-mcp/env` held placeholders at that point.
